@@ -131,7 +131,7 @@ $(document).ready(function () {
 
 <div id="to-be-interlaced-elsewhere" class="section level2">
 <h2>To be interlaced elsewhere:</h2>
-<p>TS= Topic TI= Title AU= Author [Index] AI= Author Identifiers GP= Group Author [Index] ED= Editor SO= Publication Name [Index] DO= DOI PY= Year Published CF= Conference AD= Address OG= Organization-Enhanced [Index] OO= Organization SG= Suborganization SA= Street Address CI= City PS= Province/State CU= Country/Region ZP= Zip/Postal Code FO= Funding Agency FG= Grant Number FT= Funding Text SU= Research Area WC= Web of Science Category IS= ISSN/ISBN UT= Accession Number PMID= PubMed ID ALL= All Fields</p>
+<p>TS= Topic TI= Title AU= Author AI= Author Identifiers GP= Group Author [Index] ED= Editor SO= Publication Name [Index] DO= DOI PY= Year Published CF= Conference AD= Address OG= Organization-Enhanced [Index] OO= Organization SG= Suborganization SA= Street Address CI= City PS= Province/State CU= Country/Region ZP= Zip/Postal Code FO= Funding Agency FG= Grant Number FT= Funding Text SU= Research Area WC= Web of Science Category IS= ISSN/ISBN UT= Accession Number PMID= PubMed ID ALL= All Fields</p>
 </div>
 <div id="wos-tool" class="section level2">
 <h2>WOS tool</h2>
@@ -173,7 +173,7 @@ SID &lt;- gsub('Authenticated \\(SID: ', &quot;&quot;, SID)
 SID &lt;- gsub(&quot;)&quot;, &quot;&quot;, SID)
 
 print(SID)</code></pre>
-<pre><code>## [1] &quot;6FDR5IXcqc1D3J6sa46&quot;</code></pre>
+<pre><code>## [1] &quot;6CwQc5gIKXByICHpHSG&quot;</code></pre>
 <p>Yay! So we’ve got an SID that we can use to access WOS lite.</p>
 <pre class="r"><code>library(wosr)
 
@@ -227,6 +227,57 @@ structure(list(query_id = as.numeric(query_id), rec_cnt = as.numeric(rec_cnt),
 <li><p>The request is poorly-formed</p></li>
 <li><p>The server isn’t handling things correctly</p></li>
 </ol>
+<p>Breaking things down a little, let’s try fixing the first problem. We’re going to use httr to obtain an SID instead of the system workaround above. This is also good practive with POST and checks that we’ve got some things figured out.</p>
+<pre class="r"><code>endpoint = &quot;http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite&quot;
+
+query &lt;- &quot;AU=Knuth Donald&quot; #This may break when passing an ampersand: see wosr:::escape_query
+
+bod1 &lt;- &quot;&lt;soapenv:Envelope xmlns:soapenv=\&quot;http://schemas.xmlsoap.org/soap/envelope/\&quot;\n xmlns:woksearchlite=\&quot;http://woksearchlite.v3.wokmws.thomsonreuters.com\&quot;&gt; &lt;soapenv:Header/&gt;    &lt;soap:Body&gt;\n    &lt;woksearchlite:search&gt;\n    &lt;queryParameters&gt;\n    &lt;databaseId&gt;WOS&lt;/databaseId&gt;\n    &lt;userQuery&gt; &quot;
+bod2 &lt;- &quot; &lt;/userQuery&gt;     &lt;editions&gt;\n     &lt;collection&gt;WOS&lt;/collection&gt;/n     &lt;edition&gt;SCI&lt;/edition&gt;\n    &lt;/editions&gt;\n    &lt;timeSpan&gt;\n    &lt;begin&gt;2000-01-01&lt;/begin&gt;\n    &lt;/end&gt;2011-12-31&lt;/end&gt;\n    &lt;/timespan&gt;\n    &lt;queryLanguage&gt;en&lt;/queryLanguage&gt;\n    &lt;/queryParameters&gt;\n    &lt;retrieveParameters&gt;\n    &lt;firstRecord&gt;1&lt;/firstRecord&gt;\n    &lt;count&gt;5&lt;/count&gt;\n    &lt;/retrieveParameters&gt;\n    &lt;/woksearchlite:search&gt;\n    &lt;/soapenv:Body&gt;\n    &lt;/soapenv:Envelope&gt;&quot;
+
+body &lt;- paste0(bod1, query, bod2)
+
+response &lt;- POST(endpoint, body = body, add_headers(cookie = paste0(&quot;SID=&quot;, SID)))</code></pre>
+<p>Still no luck, having updated all the URL pieces to the proper spots. Let’s push ahead with the proper authorize procedure.</p>
+<pre class="r"><code>endpoint &lt;- &quot;http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate&quot;
+
+body &lt;- '&lt;soapenv:Envelope xmlns:soapenv=&quot;http://schemas.xmlsoap.org/soap/envelope/&quot;\n    xmlns:auth=&quot;http://auth.cxf.wokmws.thomsonreuters.com&quot;&gt;\n    &lt;soapenv:Header/&gt;\n    &lt;soapenv:Body&gt;\n        &lt;auth:authenticate/&gt;\n    &lt;/soapenv:Body&gt;\n    &lt;/soapenv:Envelope&gt;'
+
+response &lt;- POST(endpoint, body = body)
+
+raw_SID = response$headers$`set-cookie`
+SID = gsub(&quot;SID=&quot;, &quot;&quot;, raw_SID)</code></pre>
+<p>So that worked - status code 200, SID returned as a cookie header. Cool!</p>
+<p>The next step appears to be to run a search for a query, followed by a request for the searched resource.</p>
+<pre class="r"><code>endpoint &lt;- &quot;http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite&quot;
+
+query &lt;- &quot;AU=Knuth Donald&quot;
+#query &lt;- &quot;TS=(cadmium OR lead)&quot;
+
+bod1 &lt;- '&lt;soapenv:Envelope xmlns:soapenv=&quot;http://schemas.xmlsoap.org/soap/envelope/&quot;\n    xmlns:woksearchlite=&quot;http://woksearchlite.v3.wokmws.thomsonreuters.com&quot;&gt;\n    &lt;soapenv:Header/&gt;\n    &lt;soapenv:Body&gt;\n    &lt;woksearchlite:search&gt;\n    &lt;queryParameters&gt;\n    &lt;databaseId&gt;WOS&lt;/databaseId&gt;\n    &lt;userQuery&gt;'
+
+#bod2 &lt;- '&lt;/userQuery&gt;\n    &lt;editions&gt;\n    &lt;collection&gt;WOS&lt;/collection&gt;\n    &lt;edition&gt;SCI&lt;/edition&gt;\n    &lt;/editions&gt;\n    &lt;timeSpan&gt;\n    &lt;begin&gt;2000-01-01&lt;/begin&gt;\n    &lt;end&gt;2011-12-31&lt;/end&gt;\n    &lt;/timeSpan&gt;\n    &lt;queryLanguage&gt;en&lt;/queryLanguage&gt;\n    &lt;/queryParameters&gt;\n    &lt;retrieveParameters&gt;\n    &lt;firstRecord&gt;1&lt;/firstRecord&gt;\n    &lt;count&gt;5&lt;/count&gt;\n    &lt;/retrieveParameters&gt;\n    &lt;/woksearchlite:search&gt;\n    &lt;/soapenv:Body&gt;\n    &lt;/soapenv:Envelope&gt;'
+
+bod2 &lt;- '&lt;/userQuery&gt;\n    &lt;timeSpan&gt;\n    &lt;begin&gt;1900-01-01&lt;/begin&gt;\n    &lt;end&gt;2050-12-31&lt;/end&gt;\n    &lt;/timeSpan&gt;\n    &lt;queryLanguage&gt;en&lt;/queryLanguage&gt;\n    &lt;/queryParameters&gt;\n    &lt;retrieveParameters&gt;\n    &lt;firstRecord&gt;1&lt;/firstRecord&gt;\n    &lt;count&gt;5&lt;/count&gt;\n    &lt;/retrieveParameters&gt;\n    &lt;/woksearchlite:search&gt;\n    &lt;/soapenv:Body&gt;\n    &lt;/soapenv:Envelope&gt;'
+
+body &lt;- paste0(bod1, query, bod2)
+
+response &lt;- POST(endpoint, body = body, add_headers(cookie=paste0(&quot;SID=&quot;, SID)))
+
+doc &lt;- wosr:::get_xml(response)
+query_id &lt;- wosr:::parse_el_txt(doc, xpath = &quot;//queryid&quot;)
+rec_cnt &lt;- wosr:::parse_el_txt(doc, xpath = &quot;//recordsfound&quot;)
+structure(list(query_id = as.numeric(query_id), rec_cnt = as.numeric(rec_cnt), 
+               sid = SID), class = &quot;query_result&quot;)</code></pre>
+<pre><code>## Matching records: 7</code></pre>
+<p>Also working! Awesome. Curiously, querying AU seems to be different from querying topics:</p>
+<ul>
+<li>AU=Knuth Donald: 1 matching record</li>
+<li>AU=Koehl Mimi: 0 matching records</li>
+<li>AU=Smith John: 249 matching records</li>
+</ul>
+<p>Are those the number of unique authors with that name? And therefore Mimi doesn’t show up at all?</p>
+<p>UPDATE: Modifying the parameters passed to the request recovers all 12 of Mimi’s papers that show up when interacting with the WOS GUI. Yay! I removed the time range and the editions tags.</p>
 </div>
 </div>
 

@@ -14,7 +14,7 @@ library(wosr)
 ##To be interlaced elsewhere:
 TS= Topic 
 TI= Title 
-AU= Author [Index] 
+AU= Author
 AI= Author Identifiers 
 GP= Group Author [Index] 
 ED= Editor 
@@ -171,3 +171,75 @@ Possible problems:
 2. The request is poorly-formed
 
 3. The server isn't handling things correctly
+
+Breaking things down a little, let's try fixing the first problem. We're going
+to use httr to obtain an SID instead of the system workaround above. This is
+also good practive with POST and checks that we've got some things figured out.
+
+```{r APIhalp}
+endpoint = "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
+
+query <- "AU=Knuth Donald" #This may break when passing an ampersand: see wosr:::escape_query
+
+bod1 <- "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n xmlns:woksearchlite=\"http://woksearchlite.v3.wokmws.thomsonreuters.com\"> <soapenv:Header/>    <soap:Body>\n    <woksearchlite:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery> "
+bod2 <- " </userQuery>     <editions>\n     <collection>WOS</collection>/n     <edition>SCI</edition>\n    </editions>\n    <timeSpan>\n    <begin>2000-01-01</begin>\n    </end>2011-12-31</end>\n    </timespan>\n    <queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>5</count>\n    </retrieveParameters>\n    </woksearchlite:search>\n    </soapenv:Body>\n    </soapenv:Envelope>"
+
+body <- paste0(bod1, query, bod2)
+
+response <- POST(endpoint, body = body, add_headers(cookie = paste0("SID=", SID)))
+```
+
+Still no luck, having updated all the URL pieces to the proper spots. Let's push ahead with the proper authorize procedure.
+
+```{r APIauth}
+endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate"
+
+body <- '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n    xmlns:auth="http://auth.cxf.wokmws.thomsonreuters.com">\n    <soapenv:Header/>\n    <soapenv:Body>\n        <auth:authenticate/>\n    </soapenv:Body>\n    </soapenv:Envelope>'
+
+response <- POST(endpoint, body = body)
+
+raw_SID = response$headers$`set-cookie`
+SID = gsub("SID=", "", raw_SID)
+```
+
+So that worked - status code 200, SID returned as a cookie header. Cool!
+
+The next step appears to be to run a search for a query, followed by a request for the searched resource.
+
+```{r APIsearch}
+endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
+
+query <- "AU=Koehl Mimi"
+#query <- "TS=(cadmium OR lead)"
+
+bod1 <- '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n    xmlns:woksearchlite="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearchlite:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery>'
+
+#bod2 <- '</userQuery>\n    <editions>\n    <collection>WOS</collection>\n    <edition>SCI</edition>\n    </editions>\n    <timeSpan>\n    <begin>2000-01-01</begin>\n    <end>2011-12-31</end>\n    </timeSpan>\n    <queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>5</count>\n    </retrieveParameters>\n    </woksearchlite:search>\n    </soapenv:Body>\n    </soapenv:Envelope>'
+
+bod2 <- '</userQuery>\n    <timeSpan>\n    <begin>1900-01-01</begin>\n    <end>2050-12-31</end>\n    </timeSpan>\n    <queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>5</count>\n    </retrieveParameters>\n    </woksearchlite:search>\n    </soapenv:Body>\n    </soapenv:Envelope>'
+
+body <- paste0(bod1, query, bod2)
+
+response <- POST(endpoint, body = body, add_headers(cookie=paste0("SID=", SID)))
+
+doc <- wosr:::get_xml(response)
+query_id <- wosr:::parse_el_txt(doc, xpath = "//queryid")
+rec_cnt <- wosr:::parse_el_txt(doc, xpath = "//recordsfound")
+structure(list(query_id = as.numeric(query_id), rec_cnt = as.numeric(rec_cnt), 
+               sid = SID), class = "query_result")
+```
+
+Also working! Awesome. Curiously, querying AU seems to be different from querying topics:
+
+  - AU=Knuth Donald: 1 matching record
+  - AU=Koehl Mimi: 0 matching records
+  - AU=Smith John: 249 matching records
+  
+Are those the number of unique authors with that name? And therefore Mimi doesn't show up at all?
+
+UPDATE: Modifying the parameters passed to the request recovers all 12 of Mimi's
+papers that show up when interacting with the WOS GUI. Yay! I removed the time
+range and the editions tags.
+
+
+
