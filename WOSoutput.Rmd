@@ -209,7 +209,7 @@ The next step appears to be to run a search for a query, followed by a request f
 ```{r APIsearch}
 endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
 
-query <- "AU=Van Mooy"
+query <- "AU=Koehl MAR"
 #query <- "TS=(cadmium OR lead)"
 
 bod1 <- '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n    xmlns:woksearchlite="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearchlite:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery>'
@@ -311,7 +311,18 @@ v <- sort(rowSums(m),decreasing=TRUE)
 d <- data.frame(word = names(v),freq=v)
 
 wordcloud(words = d$word, freq = d$freq, min.freq = 1,
-          random.order = F, rot.per = 0, max.words = 50)
+          random.order = F, rot.per = 0, max.words = 50,
+          colors = brewer.pal(9,"BuGn"))
 head(d)
 
 ```
+
+Well that's pretty fun. I'm going to bed for now.
+
+To-do for tomorrow:
+
+  1. Separate this file into multiple and streamline the process of name -> wordcloud
+    a. Expand to abstracts?
+  2. Use other author info to provide affiliations
+  3. Create summary panel (oldest paper, most cited paper, etc.)
+  4. Write it up as a Shiny application and publish
