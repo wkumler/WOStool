@@ -1,0 +1,173 @@
+---
+title: "WOSdocumentation"
+author: "wkumler"
+date: "April 23, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(wosr)
+```
+
+##To be interlaced elsewhere:
+TS= Topic 
+TI= Title 
+AU= Author [Index] 
+AI= Author Identifiers 
+GP= Group Author [Index] 
+ED= Editor 
+SO= Publication Name [Index] 
+DO= DOI 
+PY= Year Published 
+CF= Conference 
+AD= Address 
+OG= Organization-Enhanced [Index] 
+OO= Organization 
+SG= Suborganization
+SA= Street Address 
+CI= City 
+PS= Province/State 
+CU= Country/Region 
+ZP= Zip/Postal Code 
+FO= Funding Agency 
+FG= Grant Number 
+FT= Funding Text 
+SU= Research Area 
+WC= Web of Science Category 
+IS= ISSN/ISBN 
+UT= Accession Number 
+PMID= PubMed ID 
+ALL= All Fields 
+
+## WOS tool
+
+As stated in the README, I'd like to be able to access the Web Of Science tools to do some data analysis myself.
+
+Part of the trick here is getting an authentication without an authentication - fortunately, the WOS tools that came with the wos Python package allow us to request "lite" access, which produces an SID that we'll try to steal. This is accessed via the system command "wos" and various flags.
+
+To save the bash output as an accessible variable, we use the syntax from [Stack Overflow](https://stackoverflow.com/questions/4651437/how-do-i-set-a-variable-to-the-output-of-a-command-in-bash)
+
+> In addition to backticks (\`command\`), you can use $(command), which I find easier to read, and allows for nesting.
+
+> OUTPUT="$(ls -1)"
+> echo "${OUTPUT}"
+
+### Attempt \#1
+
+```{bash auth}
+#SID="$(wos --lite query 'AU=Wickham Hadley')"
+#echo $SID
+```
+
+The code throws an error, but we've got the SID we needed!
+
+```{r access, error=T}
+print(SID)
+```
+
+I was really hoping that I'd be able to access the SID variable automatically in
+the following R block, but no luck.
+
+### Attempt \#2
+
+If we can't access SID natively, perhaps we can export it as an environmental
+variable and access it otherwise?
+
+```{bash auth2}
+#export SID="$(wos --lite query 'AU=Wickham Hadley')"
+```
+
+```{r access2, error=T}
+Sys.getenv(SID)
+```
+
+No dice. Damn.
+
+### Attempt \#3: yes!
+
+Okay, rather than fiddling with bash and python and other languages, let's just
+make a system call within R. Only works in Ubuntu?
+
+```{r SID}
+#v <- system("wos --lite query 'AU=Wickham Hadley'") # Doesn't work: returns v empty
+
+v <- system("wos --lite query 'AU=Wickham Hadley'", intern = T) #Works!
+
+SID <- v[1]
+SID <- gsub('Authenticated \\(SID: ', "", SID)
+SID <- gsub(")", "", SID)
+
+print(SID)
+```
+
+Yay! So we've got an SID that we can use to access WOS lite.
+
+```{r WOS, error=T}
+library(wosr)
+
+pull_wos("AU=Wickham Hadley", sid = SID) # Throws an error - not authorized
+
+pull_wos("AU=Wickham Hadley", sid = SID, editions = "CCR") # Throws an error - not authorized
+
+query_wos("AU=Wickham Hadley", sid = SID) # Throws an error - not authorized
+```
+
+Damn. Looks like wosr is only set up to query paid data sets. Time to do it the long way!
+
+We can construct our GET and POST requests manually. By looking into the wosr 
+query_wos data, we can see how they're doing it:
+
+> response <- httr::POST("http://search.webofknowledge.com/esti/wokmws/ws/WokSearch", 
+        body = body, httr::add_headers(cookie = sprintf("SID=%s", 
+            sid)), ua(), ...)
+            
+> body <- paste0("<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n    xmlns:woksearch=\"http://woksearch.v3.wokmws.thomsonreuters.com\">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearch:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery> ", 
+        escape_query(query), 
+        " </userQuery>", 
+        paste_eds(editions), 
+        "<queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>0</count>\n    </retrieveParameters>\n    </woksearch:search>\n    </soapenv:Body>\n    </soapenv:Envelope>")
+            
+Let's try that with the different endpoint "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite",
+found [here](http://help.incites.clarivate.com/wosWebServicesLite/WebServicesLiteOverviewGroup/Introduction/serviceEndpointAddresses.html)
+
+```{r POST}
+library(httr)
+library(XML)
+library(xml2)
+
+endpoint = "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
+
+query <- "AU=Knuth Donald" #This may break when passing an ampersand: see wosr:::escape_query
+
+bod1 <- "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"\n    xmlns:woksearch=\"http://woksearch.v3.wokmws.thomsonreuters.com\">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearch:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery> "
+bod2 <- " </userQuery>"
+bod3 <- "<queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>0</count>\n    </retrieveParameters>\n    </woksearch:search>\n    </soapenv:Body>\n    </soapenv:Envelope>"
+
+body <- paste0(bod1, query, bod2, SID, bod3)
+
+response <- POST(endpoint, body = body, add_headers(cookie = paste0("SID=", SID)), wosr:::ua())
+
+
+raw_xml <- httr::content(response, as = "text")
+unescaped_xml <- wosr:::unescape_xml(raw_xml)
+unescaped_xml <- paste0("<x>", unescaped_xml, "</x>")
+doc <- read_html(unescaped_xml)
+
+
+query_id <- wosr:::parse_el_txt(doc, xpath = "//queryid")
+rec_cnt <- wosr:::parse_el_txt(doc, xpath = "//recordsfound")
+structure(list(query_id = as.numeric(query_id), rec_cnt = as.numeric(rec_cnt), 
+               sid = SID), class = "query_result")
+```
+
+So that didn't work, and is instead returning an Error 500 - server weirdness.
+
+Possible problems:
+
+1. The server knows that the SID is coming from different places
+
+2. The request is poorly-formed
+
+3. The server isn't handling things correctly
