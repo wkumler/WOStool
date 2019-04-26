@@ -206,10 +206,11 @@ So that worked - status code 200, SID returned as a cookie header. Cool!
 
 The next step appears to be to run a search for a query, followed by a request for the searched resource.
 
+
 ```{r APIsearch}
 endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
 
-query <- "AU=Koehl MAR"
+query <- "AU=Knuth Donald"
 #query <- "TS=(cadmium OR lead)"
 
 bod1 <- '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n    xmlns:woksearchlite="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearchlite:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery>'
@@ -324,5 +325,6 @@ To-do for tomorrow:
   1. Separate this file into multiple and streamline the process of name -> wordcloud
     a. Expand to abstracts?
   2. Use other author info to provide affiliations
-  3. Create summary panel (oldest paper, most cited paper, etc.)
-  4. Write it up as a Shiny application and publish
+  3. Chat with ref librarian and see whether expanded access is possible
+  4. Create summary panel (oldest paper, most cited paper, etc.)
+  5. Write it up as a Shiny application and publish
