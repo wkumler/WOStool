@@ -5,11 +5,10 @@
 # Startup things ----
 
 library(httr)
-library(wosr)
 library(XML)
 library(xml2)
 
-person <- "Ingalls Anitra"
+person <- "Reich Robert B"
 saveworthy <- F
 
 query <- paste0("AU=", person)
@@ -39,8 +38,7 @@ if(response$status_code==500){
 
 
 
-
-# Perform a search in WOS using the SID and a the query provided at top
+# Perform a search in WOS using the SID and a the query provided at top ----
 endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
 bod1 <- '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n    xmlns:woksearchlite="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearchlite:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery>'
 bod2 <- '</userQuery>\n    <timeSpan>\n    <begin>1900-01-01</begin>\n    <end>2050-12-31</end>\n    </timeSpan>\n    <queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>100</count>\n    </retrieveParameters>\n    </woksearchlite:search>\n    </soapenv:Body>\n    </soapenv:Envelope>'
@@ -50,27 +48,13 @@ body <- paste0(bod1, query, bod2)
 response <- POST(endpoint, body = body, add_headers(cookie=paste0("SID=", SID)))
 print(response$status_code)
 
-doc <- wosr:::get_xml(response)
-query_id <- wosr:::parse_el_txt(doc, xpath = "//queryid")
-rec_cnt <- wosr:::parse_el_txt(doc, xpath = "//recordsfound")
+doc <- read_html(response)
+query_id <- xml_text(xml_find_all(doc, xpath = "//queryid"))
+rec_cnt <- xml_text(xml_find_all(doc, xpath = "//recordsfound"))
 
 print(query_id)
 print(rec_cnt)
 
-
-
-# Request information about all discovered objects ----
-endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
-query_id <-  wosr:::parse_el_txt(wosr:::get_xml(response), xpath = "//queryid")
-
-bod1 <- '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n    <soap:Body>\n    <ns2:retrieve xmlns:ns2="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <queryId>'
-bod2 <- '</queryId>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>100</count>\n    </retrieveParameters>\n    </ns2:retrieve>\n    </soap:Body>\n    </soap:Envelope>'
-#<sortField>TC</sortField>\n would be nice to integrate, but may need to be added in the OG search
-body <- paste0(bod1, query_id, bod2)
-
-response <- POST(endpoint, body = body, add_headers(cookie=paste0("SID=", SID)))
-print(response$status_code)
-raw_xml <- httr::content(response, as = "text")
 raw_titles <- xml_text(xml_find_all(doc, xpath = "//title"))
 titles <- gsub("^Title", "", raw_titles)
 

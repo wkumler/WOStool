@@ -9,7 +9,7 @@ library(wosr)
 library(XML)
 library(xml2)
 
-person <- "Ingalls Anitra"
+person <- "Ng Ren"
 saveworthy <- F
 
 query <- paste0("AU=", person)
@@ -30,8 +30,9 @@ if(!exists("SID")){
   print("Reusing old SID")
 }
 
-
-
+if(response$status_code==500){
+  stop("Internal server error!")
+}
 
 
 # Perform a search in WOS using the SID and a the query provided at top ----
@@ -44,7 +45,7 @@ body <- paste0(bod1, query, bod2)
 response <- POST(endpoint, body = body, add_headers(cookie=paste0("SID=", SID)))
 print(response$status_code)
 
-doc <- wosr:::get_xml(response)
+doc <- read_html(response)
 query_id <- wosr:::parse_el_txt(doc, xpath = "//queryid")
 rec_cnt <- wosr:::parse_el_txt(doc, xpath = "//recordsfound")
 
@@ -53,27 +54,13 @@ print(rec_cnt)
 
 
 
-# Request information about all discovered objects ----
-endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
-query_id <-  wosr:::parse_el_txt(wosr:::get_xml(response), xpath = "//queryid")
+# Extract and clean author names ----
 
-bod1 <- '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n    <soap:Body>\n    <ns2:retrieve xmlns:ns2="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <queryId>'
-bod2 <- '</queryId>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>100</count>\n    </retrieveParameters>\n    </ns2:retrieve>\n    </soap:Body>\n    </soap:Envelope>'
-#<sortField>TC</sortField>\n would be nice to integrate, but may need to be added in the OG search
-body <- paste0(bod1, query_id, bod2)
-
-response <- POST(endpoint, body = body, add_headers(cookie=paste0("SID=", SID)))
-print(response$status_code)
-raw_xml <- httr::content(response, as = "text")
 raw_authors <- xml_find_all(doc, xpath = "//authors")
 authorlist <- as_list(raw_authors)
 authorvec <- unlist(authorlist)
 authorvec <- authorvec[!(names(authorvec)=="label")]
 names(authorvec) <- NULL
-
-
-
-# Clean up author names ----
 
 extract_name <- function(fullname) {
   commaspace <- regexpr(", ", fullname)[1]
