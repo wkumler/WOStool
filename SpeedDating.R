@@ -1,5 +1,5 @@
 #SpeedDating
-# Takes WOS output and does timeline stuff with it, I guess
+# Takes WOS output and creates an interactive timeline of their publications
 
 # Startup things ----
 
@@ -7,14 +7,10 @@ library(httr)
 library(XML)
 library(xml2)
 library(ggplot2)
-library(dplyr)
 library(plotly)
 
-person <- "Koehl MAR"
-saveworthy <- F
+person <- "Van Mooy"
 
-query <- paste0("AU=", person)
-#query <- "TS=bacteria"
 
 
 
@@ -45,6 +41,7 @@ if(response$status_code==500){
 endpoint <- "http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite"
 bod1 <- '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n    xmlns:woksearchlite="http://woksearchlite.v3.wokmws.thomsonreuters.com">\n    <soapenv:Header/>\n    <soapenv:Body>\n    <woksearchlite:search>\n    <queryParameters>\n    <databaseId>WOS</databaseId>\n    <userQuery>'
 bod2 <- '</userQuery>\n    <timeSpan>\n    <begin>1900-01-01</begin>\n    <end>2050-12-31</end>\n    </timeSpan>\n    <queryLanguage>en</queryLanguage>\n    </queryParameters>\n    <retrieveParameters>\n    <firstRecord>1</firstRecord>\n    <count>100</count>\n    </retrieveParameters>\n    </woksearchlite:search>\n    </soapenv:Body>\n    </soapenv:Envelope>'
+query <- paste0("AU=", person)
 
 body <- paste0(bod1, query, bod2)
 
@@ -95,7 +92,7 @@ titleClean <- function(title){
 
 clean_titles <- sapply(titles, titleClean,USE.NAMES = F)
 
-#Collect the data
+#Create a unique annotation within each year for the plot
 clean_df <- data.frame("Title"=clean_titles, "Year"=years)
 sorted_df <- clean_df[order(clean_df$Year, clean_df$Title),]
 num_within_year <- as.numeric(table(sorted_df$Year))
@@ -110,13 +107,14 @@ final_df <- cbind(sorted_df, year_id)
 
 
 # And plot ----
+labelin <- 1:max(as.numeric(year_id))
 
 gp <- ggplot(final_df) +
   geom_bar(aes(x=Year, fill=year_id, label=Title, group=interaction(Year, year_id)), 
            position = position_stack(reverse = T)) +
   coord_flip() +
   scale_fill_viridis_d() +
-  scale_y_continuous("Papers published", labels = as.character(1:max(year_id)), breaks = 1:max(year_id)) +
+  scale_y_continuous("Papers published", labels = as.character(labelin), breaks = labelin) +
   theme_minimal() +
   theme(legend.position = "none")
 
