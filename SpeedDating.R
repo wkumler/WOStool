@@ -63,7 +63,6 @@ yearGrab <- function(textchunk){
 }
 years <- sapply(splitdoc, yearGrab, USE.NAMES = F)
 yeartable <- table(years)
-barplot(yeartable)
 
 raw_titles <- xml_text(xml_find_all(doc, xpath = "//title"))
 titles <- gsub("^Title", "", raw_titles)
@@ -84,25 +83,32 @@ xcoords <- unlist(lapply(as.numeric(yeartable), spreadX))
 
 #Clean up the titles
 titleClean <- function(title){
-  outlen <- 30
+  outlen <- 40
   len <- nchar(title)
+  if(len<=outlen){
+    return(title)
+  }
   spaces <- as.numeric(gregexpr(" ", title)[[1]])
-  nlines <- floor(len/outlen)
-  small_locs <- sort(spaces%%outlen)[1:nlines]
-  spaces2replace <- sort(spaces[match(small_locs, spaces%%outlen)], decreasing = T)
-  titleout <- title
-  for(i in spaces2replace){
-    split_title_1 <- substr(x = titleout, start = 1, stop = i)
-    split_title_2 <- substr(x = titleout, start = i, stop = nchar(titleout))
-    titleout <- paste(split_title_1, split_title_2, sep = "\n")
+  nlines <- ceiling(len/outlen)
+  
+  newtitle <- substr(title, 1, ceiling(len/nlines))
+  for(i in 2:nlines){ #skip the first one to avoid putting a newline after the first word
+    chunk <- substr(title, ceiling(len/nlines)*(i-1)+1, ceiling(len/nlines)*i)
+    nchunk <- sub(" ", "\n ", chunk)
+    newtitle <- paste0(newtitle, nchunk)
+    #Divide the title into long chunks and replace the first space of each with a newline
   }
   #works, but match only finds the one location
-  titleout
+  newtitle
 }
 clean_titles <- sapply(titles, titleClean,USE.NAMES = F)
 
 #Collect the data
 cleandf <- data.frame("Title"=clean_titles, "ycoord"=ycoords, "xcoord"=xcoords)
+
+
+
+
 
 
 # And plot ----
