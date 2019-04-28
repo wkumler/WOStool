@@ -7,6 +7,7 @@ library(httr)
 library(XML)
 library(xml2)
 library(ggplot2)
+library(dplyr)
 library(plotly)
 
 person <- "Koehl MAR"
@@ -55,33 +56,23 @@ print(response$status_code)
 # Extract years and titles ----
 doc <- read_html(response)
 raw_xml <- as.character(doc)
-splitdoc <- unlist(strsplit(raw_xml, "<records>"))[-1]
+
+
+#Collect publication years
+raw_years <- unlist(strsplit(raw_xml, "<records>"))[-1]
+
 yearGrab <- function(textchunk){
   yearstart <- regexpr("<label>Published.BiblioYear</label>", textchunk)+42
   yearend <- yearstart+3
   substr(textchunk, yearstart, yearend)
 }
-years <- sapply(splitdoc, yearGrab, USE.NAMES = F)
-yeartable <- table(years)
+years <- as.numeric(sapply(raw_years, yearGrab, USE.NAMES = F))
 
+
+#Collect publication titles
 raw_titles <- xml_text(xml_find_all(doc, xpath = "//title"))
 titles <- gsub("^Title", "", raw_titles)
 
-#Set the y coordinates
-uniqueyears <- as.numeric(names(yeartable))
-ycoords <- rep(uniqueyears, as.numeric(yeartable))
-
-#Set the x coordinates
-spreadX <- function(nspots){
-#  spacing <- 1/(nspots+1)
-#  ylocs <- seq(0, 1, by=spacing)
-#  lastone <- length(ylocs)
-#  return(ylocs[-c(1,lastone)])
-  return(1:nspots)
-}
-xcoords <- unlist(lapply(as.numeric(yeartable), spreadX))
-
-#Clean up the titles
 titleClean <- function(title){
   outlen <- 40
   len <- nchar(title)
@@ -101,32 +92,32 @@ titleClean <- function(title){
   #works, but match only finds the one location
   newtitle
 }
+
 clean_titles <- sapply(titles, titleClean,USE.NAMES = F)
 
 #Collect the data
-cleandf <- data.frame("Title"=clean_titles, "ycoord"=ycoords, "xcoord"=xcoords)
+clean_df <- data.frame("Title"=clean_titles, "Year"=years)
+sorted_df <- clean_df[order(clean_df$Year, clean_df$Title),]
+num_within_year <- as.numeric(table(sorted_df$Year))
+year_id <- character(0)
+for(i in num_within_year){
+  if(i!=0){
+    year_id <- c(year_id, i:1)
+  }
+}
 
-
-
-
+final_df <- cbind(sorted_df, year_id)
 
 
 # And plot ----
 
-gp <- ggplot() +
-  geom_point(data = cleandf, aes(x=xcoord, y=ycoord, label=Title), 
-             shape = 21, colour = "#69b3a2", fill = "#69b3a2aa", size = 5, stroke = 2) +
+gp <- ggplot(final_df) +
+  geom_bar(aes(x=Year, fill=year_id, label=Title, group=interaction(Year, year_id)), 
+           position = position_stack(reverse = T)) +
+  coord_flip() +
+  scale_fill_viridis_d() +
+  scale_y_continuous("Papers published", labels = as.character(1:max(year_id)), breaks = 1:max(year_id)) +
   theme_minimal() +
-  theme(axis.line.x =element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.title.x=element_blank(),
-        axis.title.y=element_blank(),
-        legend.position="none",
-        panel.background=element_blank(),
-        panel.border=element_blank(),
-        panel.grid.major=element_blank(),
-        panel.grid.minor=element_blank(),
-        plot.background=element_blank())
+  theme(legend.position = "none")
 
-ggplotly(gp)
+ggplotly(gp, tooltip = c("label", "x"))
