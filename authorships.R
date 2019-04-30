@@ -5,9 +5,11 @@
 # Startup things ----
 
 library(httr)
-library(wosr)
 library(XML)
 library(xml2)
+library(corrplot)
+library(ggraph)
+library(igraph)
 
 person <- "Ng Ren"
 saveworthy <- F
@@ -46,8 +48,8 @@ response <- POST(endpoint, body = body, add_headers(cookie=paste0("SID=", SID)))
 print(response$status_code)
 
 doc <- read_html(response)
-query_id <- wosr:::parse_el_txt(doc, xpath = "//queryid")
-rec_cnt <- wosr:::parse_el_txt(doc, xpath = "//recordsfound")
+query_id <- xml_text(xml_find_all(doc, xpath = "//queryid"))
+rec_cnt <- xml_text(xml_find_all(doc, xpath = "//recordsfound"))
 
 print(query_id)
 print(rec_cnt)
@@ -107,8 +109,6 @@ diag(authormat) <- 0
 
 
 # Plot correlation matrix ----
-
-library(corrplot)
 if(saveworthy) {
 png(filename = paste0("Images/", gsub(" ", "_", person), "_corrplot.png"), 
     width = 2500, height = 2500, units = "px")
@@ -125,9 +125,6 @@ if(saveworthy) {dev.off()}
 
 
 # Plot network diagrams ----
-
-library(ggraph)
-library(igraph)
 network=graph_from_adjacency_matrix(authormat, mode='undirected', diag=F, weighted = T)
 
 waits <- E(network)$weight/3
@@ -160,3 +157,4 @@ ggraph(network) +
     plot.margin=unit(rep(1,4), "cm")
   )
 if(saveworthy) {dev.off()}
+

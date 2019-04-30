@@ -7,8 +7,10 @@
 library(httr)
 library(XML)
 library(xml2)
+library(tm)
+library(wordcloud)
 
-person <- "Reich Robert B"
+person <- "Van Mooy"
 saveworthy <- F
 
 query <- paste0("AU=", person)
@@ -54,6 +56,9 @@ rec_cnt <- xml_text(xml_find_all(doc, xpath = "//recordsfound"))
 
 print(query_id)
 print(rec_cnt)
+if(rec_cnt=="0") {
+  stop("No records found")
+}
 
 raw_titles <- xml_text(xml_find_all(doc, xpath = "//title"))
 titles <- gsub("^Title", "", raw_titles)
@@ -61,10 +66,6 @@ titles <- gsub("^Title", "", raw_titles)
 
 
 # And create a word cloud with it ----
-library(tm)
-library(SnowballC)
-library(wordcloud)
-
 wordiness <- sapply(X = titles, FUN = strsplit, " ")
 names(wordiness) <- NULL
 wordiness <- unlist(wordiness)
